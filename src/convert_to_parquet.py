@@ -2,6 +2,7 @@ import dask.dataframe as dd
 import logging
 
 from config import RAW, PROCESSED, LOGS
+
 #Logging some information
 logging.basicConfig(filename = LOGS/"conversion.log", level=logging.INFO)
 

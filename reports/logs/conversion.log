@@ -11,3 +11,116 @@ INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/OutOfSt
 INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/PlanogramChStores_fixed_sep.txt -> /media/piotr/Data/Inz/inz-forecast/data/processed/PlanogramChStores.parquet
 INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/Promotions.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/Promotions.parquet
 INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/SalesChStores.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/SalesChStores.parquet
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/Promotions.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/SalesChStores.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (semi-join).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/IDXs.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (semi-join).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/OutOfStock.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (semi-join).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/PlanogramChStores.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (semi-join).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/SalesChStores.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (pandas set + isin, bez shuffle).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/IDXs.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (pandas set + isin, bez shuffle).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/OutOfStock.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (pandas set + isin, bez shuffle).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/PlanogramChStores.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (pandas set + isin, bez shuffle).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/Promotions.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (pandas set + isin, bez shuffle).
+INFO:root:Przefiltrowano promocje do tych występujących w sprzedaży (semi-join po ID).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/Promotions.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (pandas set + isin, bez shuffle).
+INFO:root:Przefiltrowano promocje do tych występujących w sprzedaży (semi-join po ID).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/Promotions.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX (pandas set + isin, bez shuffle).
+INFO:root:Przefiltrowano promocje do tych występujących w sprzedaży (semi-join po ID).
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/SalesChStores.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/IDXs.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/OutOfStock.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/PlanogramChStores.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/SalesChStores.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/IDXs.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/OutOfStock.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/PlanogramChStores.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/Promotions.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
+INFO:root:Poprawnie wczytano dane z pliku /media/piotr/Data/Inz/inz-forecast/data/processed/Promotions.parquet
+INFO:root:Zapisano wiersze z brakami w istotnych kolumnach do pliku.
+INFO:root:Usunięto wiersze z brakami w istotnych kolumnach.
+INFO:root:Przefiltrowano dane na podstawie wybranych IDX.
+INFO:root:Zapisano dane po czyszczeniu do pliku.
