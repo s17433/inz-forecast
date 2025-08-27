@@ -9,7 +9,7 @@ OutOfStock_source_path = 'C:/Users/dell/Desktop/Szkoła/PROJ/Lab3/data/cleaned/O
 Promotions_source_path = 'C:/Users/dell/Desktop/Szkoła/PROJ/Lab3/data/cleaned/Promotions.parquet'
 MergedData_final_path = 'C:/Users/dell/Desktop/Szkoła/PROJ/Lab3/data/final/MergedData.parquet'
 
-"""
+
 planogram = dd.read_parquet(planogram_source_path)
 planogram = planogram.rename(columns={'source_stock_date': 'DateNo', 'location_id': 'StoreNo', 'product_id': 'IDX'})
 filtered_planogram = planogram[planogram["StoreNo"] == "R393"]
@@ -55,7 +55,7 @@ merged_df = merged_df.merge(outofstock, on=['StoreNo', 'IDX', 'DateNo'], how='le
 print("Marge ous")
 print(outofstock['StoreNo'].dtype)
 print(merged_df['StoreNo'].dtype)
-"""
+
 
 promotions = dd.read_parquet(Promotions_source_path)
 promotions = promotions[['ID', 'TypeExtention', 'ProductFunction', 'discount_percent', 'MechanismType']]
