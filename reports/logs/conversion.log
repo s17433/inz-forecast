@@ -1,0 +1,13 @@
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/ChosenIDXs.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/ChosenIDXs.parquet
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/ChosenStores.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/ChosenStores.parquet
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/IDXs.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/IDXs.parquet
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/OutOfStock.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/OutOfStock.parquet
+ERROR:root:File conversion error /media/piotr/Data/Inz/inz-forecast/data/raw/PlanogramChStores_fixed_sep.txt: An error occurred while calling the read_csv method registered to the pandas backend.
+Original Message: [Errno 2] No such file or directory: '/media/piotr/Data/Inz/inz-forecast/data/raw/PlanogramChStores_fixed_sep.txt'
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/ChosenIDXs.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/ChosenIDXs.parquet
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/ChosenStores.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/ChosenStores.parquet
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/IDXs.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/IDXs.parquet
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/OutOfStock.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/OutOfStock.parquet
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/PlanogramChStores_fixed_sep.txt -> /media/piotr/Data/Inz/inz-forecast/data/processed/PlanogramChStores.parquet
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/Promotions.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/Promotions.parquet
+INFO:root:End of conversion: /media/piotr/Data/Inz/inz-forecast/data/raw/SalesChStores.csv -> /media/piotr/Data/Inz/inz-forecast/data/processed/SalesChStores.parquet
