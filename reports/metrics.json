@@ -1,0 +1,22 @@
+{
+  "xgboost": {
+    "RMSE": 0.761,
+    "MAPE": 370600155545600.0
+  },
+  "meta": {
+    "n_features": 11,
+    "features": [
+      "dow",
+      "month",
+      "promo",
+      "OOS",
+      "SalesValue",
+      "stock_price_net",
+      "discount_percent",
+      "StoreNo",
+      "Brand",
+      "DIV2",
+      "IDX"
+    ]
+  }
+}

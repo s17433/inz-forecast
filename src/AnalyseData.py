@@ -3,9 +3,10 @@ from dask.distributed import Client, LocalCluster
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from config import FINAL
 
-MergedData_final_path = 'C:/Users/dell/Desktop/Szkoła/PROJ/Lab3/data/final/MergedData.parquet'
-MergedData_final_path_after = 'C:/Users/dell/Desktop/Szkoła/PROJ/Lab3/data/final/MergedDataAfter.parquet'
+MergedData_final_path = FINAL/"MergedData.parquet"
+MergedData_final_path_after = FINAL/"MergedDataAfter.parquet"
 
 
 df = pd.read_parquet(MergedData_final_path)
@@ -16,7 +17,7 @@ df['Sales'] = df['Sales'].fillna(0)
 df.loc[df['Sales'] < 0, 'Sales'] = 0
 df['SalesValue'] = df['SalesValue'].fillna(0)
 df.loc[df['SalesValue'] < 0, 'SalesValue'] = 0
-df['Ous'] = df['Ous'].fillna(0)
+df['OOS'] = df['OOS'].fillna(0)
 df['discount_percent'] = df['discount_percent'].fillna(0)
 df.loc[df['discount_percent'] < 0, 'discount_percent'] = 0
 
