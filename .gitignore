@@ -4,4 +4,6 @@ data/
 *.zip
 .ipynb_checkpoints/
 .DS_Store
-
+.venv/
+venv/
+saleforecast_venv/
