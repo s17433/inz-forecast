@@ -6,4 +6,4 @@ data/
 .DS_Store
 .venv/
 venv/
-saleforecast_venv/
+forecastingenv/
