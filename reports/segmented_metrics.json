@@ -1,0 +1,79 @@
+{
+  "global_xgboost": {
+    "MAE": 1.5429,
+    "RMSE": 3.1196,
+    "WAPE_percent": 77.73
+  },
+  "segmented_xgboost": {
+    "MAE": 1.5572,
+    "RMSE": 3.1631,
+    "WAPE_percent": 78.45
+  },
+  "naive_t_minus_1": {
+    "MAE": 1.9919,
+    "RMSE": 4.3761,
+    "WAPE_percent": 100.09
+  },
+  "seasonal_naive_t_minus_7": {
+    "MAE": 1.9896,
+    "RMSE": 4.4486,
+    "WAPE_percent": 100.23
+  },
+  "meta": {
+    "cutoff_date": "2024-08-05",
+    "train_rows": 214698,
+    "test_rows": 55089,
+    "evaluation_rows": 54369,
+    "rotation_thresholds": {
+      "low_medium": 1.167844522968198,
+      "medium_high": 1.6020202020202021
+    },
+    "global_features_after_one_hot": 385,
+    "segment_models": {
+      "low": {
+        "train_rows": 72846,
+        "test_rows": 18738,
+        "features_after_one_hot": 192
+      },
+      "medium": {
+        "train_rows": 71018,
+        "test_rows": 18248,
+        "features_after_one_hot": 191
+      },
+      "high": {
+        "train_rows": 70834,
+        "test_rows": 18103,
+        "features_after_one_hot": 159
+      }
+    },
+    "numeric_features": [
+      "dow",
+      "month",
+      "day_of_month",
+      "week_of_year",
+      "promo",
+      "lag_1",
+      "lag_7",
+      "lag_14",
+      "lag_28",
+      "history_mean_4lags"
+    ],
+    "categorical_features": [
+      "StoreNo",
+      "Brand",
+      "DIV2",
+      "IDX"
+    ],
+    "notes": [
+      "Model globalny i modele segmentowe używają identycznych hiperparametrów XGBoost.",
+      "Grupy low, medium i high są wyznaczane wyłącznie na podstawie danych treningowych.",
+      "Podstawą segmentacji jest średnia dzienna sprzedaż dla StoreNo + IDX.",
+      "OOS jest wyłączone z treningu i ewaluacji.",
+      "Sprzedaż z dni OOS nie jest wykorzystywana do budowania lagów.",
+      "SalesValue i stock_price_net nie są używane jako cechy modelu.",
+      "Promo jest używane jako cecha.",
+      "discount_percent nie jest wykorzystywany po wcześniejszym eksperymencie ablation.",
+      "Zmienne StoreNo, IDX, Brand i DIV2 są kodowane przez OneHotEncoder."
+    ]
+  }
+}

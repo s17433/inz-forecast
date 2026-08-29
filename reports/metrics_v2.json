@@ -1,8 +1,8 @@
 {
   "xgboost": {
-    "MAE": 1.3947,
-    "RMSE": 3.0458,
-    "WAPE_percent": 70.26
+    "MAE": 1.5429,
+    "RMSE": 3.1196,
+    "WAPE_percent": 77.73
   },
   "naive_t_minus_1": {
     "MAE": 1.9919,
@@ -20,29 +20,41 @@
     "test_rows": 55089,
     "evaluation_rows": 54369,
     "excluded_oos_rows": 720,
-    "n_features": 15,
-    "features": [
+    "n_features_after_one_hot": 385,
+    "numeric_features": [
       "dow",
       "month",
       "day_of_month",
       "week_of_year",
       "promo",
-      "discount_percent",
       "lag_1",
       "lag_7",
       "lag_14",
       "lag_28",
-      "history_mean_4lags",
+      "history_mean_4lags"
+    ],
+    "categorical_features": [
       "StoreNo",
       "Brand",
       "DIV2",
       "IDX"
     ],
+    "rotation_thresholds": {
+      "low_medium": 1.167844522968198,
+      "medium_high": 1.6020202020202021
+    },
     "notes": [
       "SalesValue i stock_price_net nie są używane jako cechy modelu.",
-      "OOS nie jest używane jako cecha; dni OOS=1 są wyłączone z treningu i ewaluacji.",
+      "OOS nie jest używane jako cecha.",
+      "Rekordy OOS są wyłączone z treningu i ewaluacji.",
+      "Sprzedaż podczas OOS nie jest używana do lagów.",
       "Lagi są liczone po dokładnych datach kalendarzowych.",
-      "Podział train/test jest czasowy i wykonywany po unikalnych datach."
+      "StoreNo, Brand, DIV2 i IDX są kodowane przez OneHotEncoder.",
+      "OneHotEncoder jest dopasowany wyłącznie na zbiorze treningowym.",
+      "Promo jest wykorzystywane jako cecha modelu.",
+      "discount_percent został wyłączony po eksperymencie ablation, ponieważ nie poprawiał jakości prognozy.",
+      "Grupy low, medium i high rotation są wyznaczane wyłącznie na podstawie zbioru treningowego.",
+      "Podstawą segmentacji jest średnia dzienna sprzedaż dla StoreNo + IDX."
     ]
   }
 }

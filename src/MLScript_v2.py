@@ -1,587 +1,2265 @@
 import json
 import logging
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xgboost as xgb
+
+from sklearn.compose import ColumnTransformer
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.preprocessing import OneHotEncoder
 
 from config import FINAL, REPORTS, PLOTS
 
+
+# ============================================================
+# LOGOWANIE
+# ============================================================
+
 logging.basicConfig(
-    level = logging.INFO,
+    level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
+
+# ============================================================
+# KONFIGURACJA
+# ============================================================
+
 DATE_COL = "DateNo"
 TARGET = "Sales"
-GROUP_COLS = ["StoreNo", "IDX"]
-LAGS = [1, 7, 14, 28]
+
+# Każda seria = jeden produkt w jednym sklepie.
+GROUP_COLS = [
+    "StoreNo",
+    "IDX",
+]
+
+# Historyczne okresy sprzedaży.
+LAGS = [
+    1,
+    7,
+    14,
+    28,
+]
 
 
+# ============================================================
+# CECHY
+# ============================================================
 
-#W tej wersji już nie biorę pod uwagę kilku cech
-#OOS (skupiamy się na warunkach dostępności produktu), SalesValues  i stock_price_net
+# Najlepszy dotychczas wariant:
+# promo zostawiamy,
+# discount_percent wyłączamy.
 NUMERIC_CANDIDATES = [
     "dow",
     "month",
     "day_of_month",
     "week_of_year",
     "promo",
-    "Price",
-    "discount_percent",
+
     "lag_1",
     "lag_7",
     "lag_14",
     "lag_28",
-    "history_mean_4lags"
+
+    "history_mean_4lags",
 ]
 
-CATEGORICAL_CANDIDATES = ["StoreNo", "Brand", "DIV2", "IDX"]
-DROP_IF_PRESENT = ["ID", "ID_Promo", "SalesValue", "stock_price_net"]
 
-def safe_rmse(y_true, y_pred) -> float:
+CATEGORICAL_CANDIDATES = [
+    "StoreNo",
+    "Brand",
+    "DIV2",
+    "IDX",
+]
+
+
+DROP_IF_PRESENT = [
+    "ID",
+    "ID_Promo",
+    "SalesValue",
+    "stock_price_net",
+]
+
+
+# ============================================================
+# METRYKI
+# ============================================================
+
+def safe_rmse(y_true, y_pred):
+
     try:
-        return float(mean_squared_error(y_true, y_pred, squared=False))
+        return float(
+            mean_squared_error(
+                y_true,
+                y_pred,
+                squared=False,
+            )
+        )
+
     except TypeError:
-        return float(np.sqrt(mean_squared_error(y_true, y_pred)))
-    
-def wape(y_true, y_pred) -> float:
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred = np.asarray(y_pred, dtype=float)
-    denominator = np.abs(y_true).sum()
+        return float(
+            np.sqrt(
+                mean_squared_error(
+                    y_true,
+                    y_pred,
+                )
+            )
+        )
+
+
+def wape(y_true, y_pred):
+
+    y_true = np.asarray(
+        y_true,
+        dtype=float,
+    )
+
+    y_pred = np.asarray(
+        y_pred,
+        dtype=float,
+    )
+
+    denominator = np.abs(
+        y_true
+    ).sum()
+
     if denominator == 0:
         return float("nan")
-    return float(np.abs(y_true - y_pred).sum() / denominator * 100.0)
 
-def calculate_metrics(y_true, y_pred) -> dict:
+    return float(
+        np.abs(
+            y_true - y_pred
+        ).sum()
+        / denominator
+        * 100
+    )
+
+
+def calculate_metrics(
+    y_true,
+    y_pred,
+):
+
     return {
-        "MAE": round(float(mean_absolute_error(y_true, y_pred)), 4),
-        "RMSE": round(safe_rmse(y_true, y_pred), 4),
-        "WAPE_percent": round(wape(y_true, y_pred), 2),
+
+        "MAE": round(
+            float(
+                mean_absolute_error(
+                    y_true,
+                    y_pred,
+                )
+            ),
+            4,
+        ),
+
+        "RMSE": round(
+            safe_rmse(
+                y_true,
+                y_pred,
+            ),
+            4,
+        ),
+
+        "WAPE_percent": round(
+            wape(
+                y_true,
+                y_pred,
+            ),
+            2,
+        ),
     }
 
-def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
+
+# ============================================================
+# CECHY KALENDARZOWE
+# ============================================================
+
+def add_calendar_features(df):
+
     df = df.copy()
-    df[DATE_COL] = pd.to_datetime(df[DATE_COL], errors="coerce")
-    df["dow"] = df[DATE_COL].dt.dayofweek
-    df["month"] = df[DATE_COL].dt.month
-    df["day_of_month"] = df[DATE_COL].dt.day
-    df["week_of_year"] = df[DATE_COL].dt.isocalendar().week.astype("int16")
+
+    df[DATE_COL] = pd.to_datetime(
+        df[DATE_COL],
+        errors="coerce",
+    )
+
+    df["dow"] = (
+        df[DATE_COL]
+        .dt.dayofweek
+    )
+
+    df["month"] = (
+        df[DATE_COL]
+        .dt.month
+    )
+
+    df["day_of_month"] = (
+        df[DATE_COL]
+        .dt.day
+    )
+
+    df["week_of_year"] = (
+        df[DATE_COL]
+        .dt.isocalendar()
+        .week
+        .astype("int16")
+    )
+
     return df
 
-def add_exact_date_lags(df):
+
+# ============================================================
+# OOS I HISTORIA SPRZEDAŻY
+# ============================================================
+
+def add_sales_for_history(df):
+
+    df = df.copy()
+
+    df["SalesForHistory"] = pd.to_numeric(
+        df[TARGET],
+        errors="coerce",
+    )
+
+    if "OOS" in df.columns:
+
+        oos_numeric = pd.to_numeric(
+            df["OOS"],
+            errors="coerce",
+        ).fillna(0)
+
+        # Dzień OOS nie reprezentuje rzeczywistego popytu.
+        df.loc[
+            oos_numeric == 1,
+            "SalesForHistory",
+        ] = np.nan
+
+    return df
+
+
+# ============================================================
+# LAGI
+# ============================================================
+
+def add_exact_date_lags(
+    df,
+    lags=LAGS,
+):
+
+    required = (
+        GROUP_COLS
+        + [
+            DATE_COL,
+            "SalesForHistory",
+        ]
+    )
+
+    missing = [
+        col
+        for col in required
+        if col not in df.columns
+    ]
+
+    if missing:
+        raise ValueError(
+            f"Brak kolumn potrzebnych do lagów: {missing}"
+        )
+
     result = df.copy()
 
     duplicated = result.duplicated(
         GROUP_COLS + [DATE_COL],
-        keep=False
+        keep=False,
     )
 
     if duplicated.any():
         raise ValueError(
-            f"W danych znaleziono {duplicated.sum()} wierszy "
-            "należących do zduplikowanych kombinacji "
-            "StoreNo + IDX + DateNo."
+            f"W danych znaleziono "
+            f"{int(duplicated.sum())} "
+            f"wierszy należących do zduplikowanych kombinacji "
+            f"{GROUP_COLS + [DATE_COL]}"
         )
 
-    for lag in LAGS:
-        lag_df = result[
-            GROUP_COLS + [DATE_COL, "SalesForHistory"]
-        ].copy()
+    history = result[
+        GROUP_COLS
+        + [
+            DATE_COL,
+            "SalesForHistory",
+        ]
+    ].copy()
 
+    for lag in lags:
+
+        lag_df = history.copy()
+
+        # Rekord z dnia t-lag przesuwamy do dnia t.
         lag_df[DATE_COL] = (
-            lag_df[DATE_COL] + pd.Timedelta(days=lag)
+            lag_df[DATE_COL]
+            + pd.Timedelta(
+                days=lag
+            )
         )
 
         lag_df = lag_df.rename(
-            columns={"SalesForHistory": f"lag_{lag}"}
+            columns={
+                "SalesForHistory":
+                    f"lag_{lag}"
+            }
         )
 
         result = result.merge(
             lag_df,
             on=GROUP_COLS + [DATE_COL],
-            how="left"
+            how="left",
+            validate="one_to_one",
         )
+
+    lag_cols = [
+        f"lag_{lag}"
+        for lag in lags
+    ]
+
+    result[
+        "history_mean_4lags"
+    ] = result[
+        lag_cols
+    ].mean(
+        axis=1,
+        skipna=True,
+    )
 
     return result
 
 
-def split_by_unique_dates(df: pd.DataFrame, ratio: float = 0.8):
-    
-    #Podział po unikalnych datach, a nie po numerze wiersza.
-    #Zapobiega sytuacji, w której ta sama data trafia częściowo do train i test.
+# ============================================================
+# TRAIN / TEST
+# ============================================================
 
-    dates = np.array(sorted(df[DATE_COL].dropna().unique()))
+def split_by_unique_dates(
+    df,
+    ratio=0.8,
+):
+
+    dates = np.array(
+        sorted(
+            df[
+                DATE_COL
+            ]
+            .dropna()
+            .unique()
+        )
+    )
+
     if len(dates) < 2:
-        raise ValueError("Za mało unikalnych dat do podziału train/test.")
+        raise ValueError(
+            "Za mało dat do podziału train/test."
+        )
 
-    cutoff_idx = max(1, min(len(dates) - 1, int(len(dates) * ratio)))
-    cutoff_date = pd.Timestamp(dates[cutoff_idx - 1])
+    cutoff_idx = int(
+        len(dates)
+        * ratio
+    )
 
-    train = df[df[DATE_COL] <= cutoff_date].copy()
-    test = df[df[DATE_COL] > cutoff_date].copy()
+    cutoff_idx = max(
+        1,
+        min(
+            cutoff_idx,
+            len(dates) - 1,
+        )
+    )
 
-    if train.empty or test.empty:
-        raise ValueError("Po podziale czasowym train lub test jest pusty.")
+    cutoff_date = pd.Timestamp(
+        dates[
+            cutoff_idx - 1
+        ]
+    )
 
-    return train, test, cutoff_date
+    train = df[
+        df[DATE_COL]
+        <= cutoff_date
+    ].copy()
+
+    test = df[
+        df[DATE_COL]
+        > cutoff_date
+    ].copy()
+
+    return (
+        train,
+        test,
+        cutoff_date,
+    )
 
 
-def encode_categories_from_train(train: pd.DataFrame, test: pd.DataFrame, columns: list[str]):
-    #Mapowanie kategorii budowane wyłącznie na train. Nieznane w test -> -1
+# ============================================================
+# SEGMENTACJA ROTACJI
+# ============================================================
+
+def build_rotation_groups(
+    train: pd.DataFrame
+):
+    """
+    Wyznacza low / medium / high rotation
+    wyłącznie na podstawie zbioru treningowego.
+
+    Podstawą jest średnia dzienna sprzedaż
+    konkretnej pary StoreNo + IDX.
+    """
+
+    series_stats = (
+        train
+        .groupby(
+            GROUP_COLS
+        )
+        .agg(
+            days=(
+                TARGET,
+                "count",
+            ),
+
+            mean_daily_sales=(
+                TARGET,
+                "mean",
+            ),
+
+            median_daily_sales=(
+                TARGET,
+                "median",
+            ),
+
+            positive_sales_days=(
+                TARGET,
+                lambda x: (
+                    x > 0
+                ).sum()
+            ),
+
+            zero_sales_days=(
+                TARGET,
+                lambda x: (
+                    x == 0
+                ).sum()
+            ),
+        )
+        .reset_index()
+    )
+
+    series_stats[
+        "positive_day_share"
+    ] = (
+        series_stats[
+            "positive_sales_days"
+        ]
+        / series_stats[
+            "days"
+        ]
+    )
+
+    series_stats[
+        "zero_day_share"
+    ] = (
+        series_stats[
+            "zero_sales_days"
+        ]
+        / series_stats[
+            "days"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # Progi wyznaczamy z danych treningowych.
+    # --------------------------------------------------------
+
+    q_low = (
+        series_stats[
+            "mean_daily_sales"
+        ]
+        .quantile(
+            1 / 3
+        )
+    )
+
+    q_high = (
+        series_stats[
+            "mean_daily_sales"
+        ]
+        .quantile(
+            2 / 3
+        )
+    )
+
+    series_stats[
+        "rotation_group"
+    ] = np.select(
+        [
+            series_stats[
+                "mean_daily_sales"
+            ] <= q_low,
+
+            series_stats[
+                "mean_daily_sales"
+            ] <= q_high,
+        ],
+        [
+            "low",
+            "medium",
+        ],
+        default="high",
+    )
+
+    print(
+        "\n=== SEGMENTACJA ROTACJI ==="
+    )
+
+    print(
+        f"Próg low / medium: "
+        f"{q_low:.4f} szt./dzień"
+    )
+
+    print(
+        f"Próg medium / high: "
+        f"{q_high:.4f} szt./dzień"
+    )
+
+    print(
+        "\nLiczba serii:"
+    )
+
+    print(
+        series_stats[
+            "rotation_group"
+        ]
+        .value_counts()
+        .reindex(
+            [
+                "low",
+                "medium",
+                "high",
+            ]
+        )
+    )
+
+    print(
+        "\nStatystyki grup:"
+    )
+
+    rotation_summary = (
+        series_stats
+        .groupby(
+            "rotation_group"
+        )[
+            [
+                "mean_daily_sales",
+                "positive_day_share",
+                "zero_day_share",
+            ]
+        ]
+        .mean()
+        .reindex(
+            [
+                "low",
+                "medium",
+                "high",
+            ]
+        )
+    )
+
+    print(
+        rotation_summary
+    )
+
+    return (
+        series_stats,
+        q_low,
+        q_high,
+    )
+
+
+def attach_rotation_groups(
+    df: pd.DataFrame,
+    series_stats: pd.DataFrame,
+):
+    """
+    Dołącza grupę rotacji wyznaczoną wcześniej na train.
+    """
+
+    lookup = (
+        series_stats[
+            GROUP_COLS
+            + [
+                "rotation_group"
+            ]
+        ]
+        .drop_duplicates(
+            subset=GROUP_COLS
+        )
+    )
+
+    result = df.merge(
+        lookup,
+        on=GROUP_COLS,
+        how="left",
+        validate="many_to_one",
+    )
+
+    return result
+
+
+# ============================================================
+# ONE HOT ENCODING
+# ============================================================
+
+def prepare_features_one_hot(
+    train,
+    test,
+):
+
     train = train.copy()
     test = test.copy()
 
-    for col in columns:
-        train_values = train[col].fillna("__MISSING__").astype(str)
-        test_values = test[col].fillna("__MISSING__").astype(str)
+    numeric_features = [
+        col
+        for col in NUMERIC_CANDIDATES
+        if col in train.columns
+    ]
 
-        categories = pd.Index(train_values.unique())
-        mapping = {value: i for i, value in enumerate(categories)}
+    categorical_features = [
+        col
+        for col in CATEGORICAL_CANDIDATES
+        if col in train.columns
+    ]
 
-        train[col] = train_values.map(mapping).fillna(-1).astype("int32")
-        test[col] = test_values.map(mapping).fillna(-1).astype("int32")
-
-    return train, test
-
-
-def prepare_features(train: pd.DataFrame, test: pd.DataFrame):
-    numeric_features = [c for c in NUMERIC_CANDIDATES if c in train.columns]
-    categorical_features = [c for c in CATEGORICAL_CANDIDATES if c in train.columns]
+    # --------------------------------------------------------
+    # NUMERYCZNE
+    # --------------------------------------------------------
 
     for col in numeric_features:
-        train[col] = pd.to_numeric(train[col], errors="coerce").astype("float32")
-        test[col] = pd.to_numeric(test[col], errors="coerce").astype("float32")
 
-    train, test = encode_categories_from_train(train, test, categorical_features)
+        train[col] = pd.to_numeric(
+            train[col],
+            errors="coerce",
+        ).astype(
+            "float32"
+        )
 
-    features = numeric_features + categorical_features
-    if not features:
-        raise ValueError("Brak cech do trenowania modelu.")
+        test[col] = pd.to_numeric(
+            test[col],
+            errors="coerce",
+        ).astype(
+            "float32"
+        )
 
-    return train, test, features
+    # --------------------------------------------------------
+    # KATEGORIE
+    # --------------------------------------------------------
+
+    for col in categorical_features:
+
+        train[col] = (
+            train[col]
+            .fillna(
+                "__MISSING__"
+            )
+            .astype(str)
+        )
+
+        test[col] = (
+            test[col]
+            .fillna(
+                "__MISSING__"
+            )
+            .astype(str)
+        )
+
+    # --------------------------------------------------------
+    # OneHotEncoder
+    # --------------------------------------------------------
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            (
+                "numeric",
+                "passthrough",
+                numeric_features,
+            ),
+
+            (
+                "categorical",
+                OneHotEncoder(
+                    handle_unknown="ignore",
+                    sparse_output=True,
+                    dtype=np.float32,
+                ),
+                categorical_features,
+            ),
+        ],
+
+        remainder="drop",
+        sparse_threshold=0.3,
+    )
+
+    columns = (
+        numeric_features
+        + categorical_features
+    )
+
+    X_train = (
+        preprocessor
+        .fit_transform(
+            train[
+                columns
+            ]
+        )
+    )
+
+    X_test = (
+        preprocessor
+        .transform(
+            test[
+                columns
+            ]
+        )
+    )
+
+    feature_names = (
+        preprocessor
+        .get_feature_names_out()
+        .tolist()
+    )
+
+    return (
+        train,
+        test,
+        X_train,
+        X_test,
+        feature_names,
+        preprocessor,
+    )
 
 
-def make_baselines(test: pd.DataFrame) -> dict[str, pd.Series]:
+# ============================================================
+# BASELINE
+# ============================================================
+
+def make_baselines(test):
+
     baselines = {}
+
     if "lag_1" in test.columns:
-        baselines["naive_t_minus_1"] = test["lag_1"]
+
+        baselines[
+            "naive_t_minus_1"
+        ] = test[
+            "lag_1"
+        ]
+
     if "lag_7" in test.columns:
-        baselines["seasonal_naive_t_minus_7"] = test["lag_7"]
+
+        baselines[
+            "seasonal_naive_t_minus_7"
+        ] = test[
+            "lag_7"
+        ]
+
     return baselines
 
 
-def save_feature_importance(model, features: list[str]):
-    importance = pd.DataFrame({
-        "feature": features,
-        "importance": model.feature_importances_,
-    }).sort_values("importance", ascending=False)
+# ============================================================
+# ANALIZA WEDŁUG ROTACJI
+# ============================================================
 
-    importance.to_csv(REPORTS / "feature_importance.csv", index=False)
+def calculate_rotation_metrics(
+    eval_df: pd.DataFrame
+):
+    """
+    Liczy osobne metryki dla:
+    low / medium / high rotation.
+    """
 
-    top = importance.head(20).sort_values("importance", ascending=True)
-    plt.figure(figsize=(9, 6))
-    plt.barh(top["feature"], top["importance"])
-    plt.xlabel("Feature importance")
-    plt.title("XGBoost - najważniejsze cechy")
+    rows = []
+
+    group_order = [
+        "low",
+        "medium",
+        "high",
+    ]
+
+    for rotation_group in group_order:
+
+        group_df = eval_df[
+            eval_df[
+                "rotation_group"
+            ]
+            == rotation_group
+        ].copy()
+
+        if group_df.empty:
+            continue
+
+        # ====================================================
+        # XGBOOST
+        # ====================================================
+
+        xgb_metrics = calculate_metrics(
+            group_df[
+                TARGET
+            ],
+
+            group_df[
+                "prediction_xgboost"
+            ],
+        )
+
+        rows.append(
+            {
+                "rotation_group":
+                    rotation_group,
+
+                "model":
+                    "xgboost",
+
+                "rows":
+                    int(
+                        len(
+                            group_df
+                        )
+                    ),
+
+                "actual_mean_sales":
+                    round(
+                        float(
+                            group_df[
+                                TARGET
+                            ].mean()
+                        ),
+                        4,
+                    ),
+
+                "zero_sales_percent":
+                    round(
+                        float(
+                            (
+                                group_df[
+                                    TARGET
+                                ]
+                                == 0
+                            ).mean()
+                            * 100
+                        ),
+                        2,
+                    ),
+
+                **xgb_metrics,
+            }
+        )
+
+        # ====================================================
+        # NAIVE T-1
+        # ====================================================
+
+        if "lag_1" in group_df.columns:
+
+            valid = (
+                group_df[
+                    "lag_1"
+                ]
+                .notna()
+            )
+
+            if valid.any():
+
+                baseline_metrics = (
+                    calculate_metrics(
+                        group_df.loc[
+                            valid,
+                            TARGET,
+                        ],
+
+                        group_df.loc[
+                            valid,
+                            "lag_1",
+                        ],
+                    )
+                )
+
+                rows.append(
+                    {
+                        "rotation_group":
+                            rotation_group,
+
+                        "model":
+                            "naive_t_minus_1",
+
+                        "rows":
+                            int(
+                                valid.sum()
+                            ),
+
+                        "actual_mean_sales":
+                            round(
+                                float(
+                                    group_df.loc[
+                                        valid,
+                                        TARGET,
+                                    ].mean()
+                                ),
+                                4,
+                            ),
+
+                        "zero_sales_percent":
+                            round(
+                                float(
+                                    (
+                                        group_df.loc[
+                                            valid,
+                                            TARGET,
+                                        ]
+                                        == 0
+                                    ).mean()
+                                    * 100
+                                ),
+                                2,
+                            ),
+
+                        **baseline_metrics,
+                    }
+                )
+
+        # ====================================================
+        # SEASONAL NAIVE T-7
+        # ====================================================
+
+        if "lag_7" in group_df.columns:
+
+            valid = (
+                group_df[
+                    "lag_7"
+                ]
+                .notna()
+            )
+
+            if valid.any():
+
+                baseline_metrics = (
+                    calculate_metrics(
+                        group_df.loc[
+                            valid,
+                            TARGET,
+                        ],
+
+                        group_df.loc[
+                            valid,
+                            "lag_7",
+                        ],
+                    )
+                )
+
+                rows.append(
+                    {
+                        "rotation_group":
+                            rotation_group,
+
+                        "model":
+                            "seasonal_naive_t_minus_7",
+
+                        "rows":
+                            int(
+                                valid.sum()
+                            ),
+
+                        "actual_mean_sales":
+                            round(
+                                float(
+                                    group_df.loc[
+                                        valid,
+                                        TARGET,
+                                    ].mean()
+                                ),
+                                4,
+                            ),
+
+                        "zero_sales_percent":
+                            round(
+                                float(
+                                    (
+                                        group_df.loc[
+                                            valid,
+                                            TARGET,
+                                        ]
+                                        == 0
+                                    ).mean()
+                                    * 100
+                                ),
+                                2,
+                            ),
+
+                        **baseline_metrics,
+                    }
+                )
+
+    return pd.DataFrame(
+        rows
+    )
+
+
+# ============================================================
+# FEATURE IMPORTANCE
+# ============================================================
+
+def save_feature_importance(
+    model,
+    feature_names,
+):
+
+    importance = pd.DataFrame(
+        {
+            "feature":
+                feature_names,
+
+            "importance":
+                model.feature_importances_,
+        }
+    )
+
+    importance = (
+        importance
+        .sort_values(
+            "importance",
+            ascending=False,
+        )
+    )
+
+    importance.to_csv(
+        REPORTS
+        / "feature_importance.csv",
+        index=False,
+    )
+
+    top = (
+        importance
+        .head(25)
+        .sort_values(
+            "importance",
+            ascending=True,
+        )
+    )
+
+    plt.figure(
+        figsize=(10, 7)
+    )
+
+    plt.barh(
+        top[
+            "feature"
+        ],
+        top[
+            "importance"
+        ],
+    )
+
+    plt.xlabel(
+        "Feature importance"
+    )
+
+    plt.title(
+        "XGBoost - najważniejsze cechy"
+    )
+
     plt.tight_layout()
-    plt.savefig(PLOTS / "feature_importance.png", dpi=160)
+
+    plt.savefig(
+        PLOTS
+        / "feature_importance.png",
+        dpi=160,
+    )
+
     plt.close()
 
 
-def save_model_comparison(metrics: dict):
+# ============================================================
+# MODEL COMPARISON
+# ============================================================
+
+def save_model_comparison(
+    metrics
+):
+
     rows = []
-    for model_name, values in metrics.items():
+
+    for (
+        model_name,
+        values
+    ) in metrics.items():
+
         if model_name == "meta":
             continue
-        rows.append({"model": model_name, **values})
 
-    comparison = pd.DataFrame(rows)
-    comparison.to_csv(REPORTS / "model_comparison.csv", index=False)
+        rows.append(
+            {
+                "model":
+                    model_name,
 
-    if not comparison.empty and "WAPE_percent" in comparison.columns:
-        plot_df = comparison.dropna(subset=["WAPE_percent"]).copy()
-        plt.figure(figsize=(8, 4))
-        plt.bar(plot_df["model"], plot_df["WAPE_percent"])
-        plt.ylabel("WAPE [%]")
-        plt.title("Porównanie modeli")
-        plt.xticks(rotation=20, ha="right")
-        plt.tight_layout()
-        plt.savefig(PLOTS / "model_comparison.png", dpi=160)
-        plt.close()
+                **values,
+            }
+        )
 
-
-def save_example_prediction_plot(test_eval: pd.DataFrame):
-    # Wybierz serię StoreNo-IDX z największą liczbą obserwacji w teście.
-    counts = (
-        test_eval.groupby(["StoreNo_original", "IDX_original"])
-        .size()
-        .sort_values(ascending=False)
+    comparison = pd.DataFrame(
+        rows
     )
+
+    comparison.to_csv(
+        REPORTS
+        / "model_comparison.csv",
+        index=False,
+    )
+
+    if comparison.empty:
+        return
+
+    plt.figure(
+        figsize=(8, 4)
+    )
+
+    plt.bar(
+        comparison[
+            "model"
+        ],
+        comparison[
+            "WAPE_percent"
+        ],
+    )
+
+    plt.ylabel(
+        "WAPE [%]"
+    )
+
+    plt.title(
+        "Porównanie modeli"
+    )
+
+    plt.xticks(
+        rotation=20,
+        ha="right",
+    )
+
+    plt.tight_layout()
+
+    plt.savefig(
+        PLOTS
+        / "model_comparison.png",
+        dpi=160,
+    )
+
+    plt.close()
+
+
+# ============================================================
+# WYKRES ROTACJI
+# ============================================================
+
+def save_rotation_comparison_plot(
+    rotation_metrics: pd.DataFrame
+):
+
+    if rotation_metrics.empty:
+        return
+
+    plot_df = rotation_metrics[
+        rotation_metrics[
+            "model"
+        ]
+        == "xgboost"
+    ].copy()
+
+    if plot_df.empty:
+        return
+
+    order = [
+        "low",
+        "medium",
+        "high",
+    ]
+
+    plot_df[
+        "rotation_group"
+    ] = pd.Categorical(
+        plot_df[
+            "rotation_group"
+        ],
+        categories=order,
+        ordered=True,
+    )
+
+    plot_df = (
+        plot_df
+        .sort_values(
+            "rotation_group"
+        )
+    )
+
+    plt.figure(
+        figsize=(7, 4)
+    )
+
+    plt.bar(
+        plot_df[
+            "rotation_group"
+        ].astype(str),
+
+        plot_df[
+            "WAPE_percent"
+        ],
+    )
+
+    plt.ylabel(
+        "WAPE [%]"
+    )
+
+    plt.xlabel(
+        "Grupa rotacji"
+    )
+
+    plt.title(
+        "XGBoost - WAPE według rotacji"
+    )
+
+    plt.tight_layout()
+
+    plt.savefig(
+        PLOTS
+        / "rotation_wape.png",
+        dpi=160,
+    )
+
+    plt.close()
+
+
+# ============================================================
+# PRZYKŁADOWY WYKRES PROGNOZY
+# ============================================================
+
+def save_example_prediction_plot(
+    test_eval,
+):
+
+    counts = (
+        test_eval
+        .groupby(
+            [
+                "StoreNo",
+                "IDX",
+            ]
+        )
+        .size()
+        .sort_values(
+            ascending=False
+        )
+    )
+
     if counts.empty:
         return
 
-    store, idx = counts.index[0]
-    sample = test_eval[
-        (test_eval["StoreNo_original"] == store)
-        & (test_eval["IDX_original"] == idx)
-    ].sort_values(DATE_COL)
+    store, idx = (
+        counts.index[0]
+    )
+
+    sample = (
+        test_eval[
+            (
+                test_eval[
+                    "StoreNo"
+                ]
+                == store
+            )
+            &
+            (
+                test_eval[
+                    "IDX"
+                ]
+                == idx
+            )
+        ]
+        .sort_values(
+            DATE_COL
+        )
+    )
 
     if sample.empty:
         return
 
-    plt.figure(figsize=(11, 4))
-    plt.plot(sample[DATE_COL], sample[TARGET], label="sprzedaż rzeczywista")
-    plt.plot(sample[DATE_COL], sample["prediction_xgboost"], label="prognoza XGBoost")
+    plt.figure(
+        figsize=(11, 4)
+    )
+
+    plt.plot(
+        sample[
+            DATE_COL
+        ],
+
+        sample[
+            TARGET
+        ],
+
+        label=
+            "sprzedaż rzeczywista",
+    )
+
+    plt.plot(
+        sample[
+            DATE_COL
+        ],
+
+        sample[
+            "prediction_xgboost"
+        ],
+
+        label=
+            "prognoza XGBoost",
+    )
+
     if "lag_7" in sample.columns:
-        plt.plot(sample[DATE_COL], sample["lag_7"], label="seasonal naive t-7", alpha=0.7)
-    plt.title(f"Przykład prognozy: sklep {store}, IDX {idx}")
-    plt.xlabel("Data")
-    plt.ylabel("Sprzedaż")
+
+        plt.plot(
+            sample[
+                DATE_COL
+            ],
+
+            sample[
+                "lag_7"
+            ],
+
+            label=
+                "seasonal naive t-7",
+
+            alpha=0.7,
+        )
+
+    plt.title(
+        f"Przykład prognozy: "
+        f"sklep {store}, "
+        f"IDX {idx}"
+    )
+
+    plt.xlabel(
+        "Data"
+    )
+
+    plt.ylabel(
+        "Sprzedaż"
+    )
+
     plt.legend()
+
     plt.tight_layout()
-    plt.savefig(PLOTS / "prediction_example.png", dpi=160)
+
+    plt.savefig(
+        PLOTS
+        / "prediction_example.png",
+        dpi=160,
+    )
+
     plt.close()
 
 
+# ============================================================
+# MAIN
+# ============================================================
+
 def run():
-    data_path = FINAL / "MergedDataAfter.parquet"
-    if not data_path.exists():
-        raise FileNotFoundError(f"Nie znaleziono danych: {data_path}")
 
-    REPORTS.mkdir(parents=True, exist_ok=True)
-    PLOTS.mkdir(parents=True, exist_ok=True)
-
-    logging.info("Wczytywanie danych: %s", data_path)
-    df = pd.read_parquet(data_path)
-
-    print("\n" + "=" * 60)
-    print("DIAGNOSTYKA DANYCH WEJŚCIOWYCH")
-    print("=" * 60)
-
-    # ---------------------------------------------------------
-    # 1. Sprzedaż zerowa
-    # ---------------------------------------------------------
-    sales_numeric = pd.to_numeric(df[TARGET], errors="coerce")
-
-    zero_sales = (sales_numeric == 0).sum()
-    positive_sales = (sales_numeric > 0).sum()
-    missing_sales = sales_numeric.isna().sum()
-
-    print("\n=== SALES ===")
-    print(f"Wszystkie rekordy: {len(df)}")
-    print(f"Sales = 0: {zero_sales} ({zero_sales / len(df) * 100:.2f}%)")
-    print(
-        f"Sales > 0: {positive_sales} "
-        f"({positive_sales / len(df) * 100:.2f}%)"
+    data_path = (
+        FINAL
+        / "MergedDataAfter.parquet"
     )
-    print(f"Sales NaN: {missing_sales}")
 
-    # ---------------------------------------------------------
-    # 2. OOS
-    # ---------------------------------------------------------
-    if "OOS" in df.columns:
-        print("\n=== OOS ===")
-
-        print(
-            df["OOS"]
-            .value_counts(dropna=False)
-            .sort_index()
+    if not data_path.exists():
+        raise FileNotFoundError(
+            f"Nie znaleziono: {data_path}"
         )
 
-    # ---------------------------------------------------------
-    # 3. Promocje
-    # ---------------------------------------------------------
-    if "promo" in df.columns:
-        print("\n=== PROMO ===")
+    REPORTS.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-        print(
-            df["promo"]
-            .value_counts(dropna=False)
-            .sort_index()
-        )
+    PLOTS.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-        print(
-            f"promo NaN: {df['promo'].isna().sum()} "
-            f"({df['promo'].isna().mean() * 100:.2f}%)"
-        )
 
-    # ---------------------------------------------------------
-    # 4. Rabat
-    # ---------------------------------------------------------
-    if "discount_percent" in df.columns:
-        print("\n=== DISCOUNT_PERCENT ===")
+    # ========================================================
+    # WCZYTANIE
+    # ========================================================
 
-        print(
-            f"NaN: {df['discount_percent'].isna().sum()} "
-            f"({df['discount_percent'].isna().mean() * 100:.2f}%)"
-        )
+    logging.info(
+        "Wczytywanie danych: %s",
+        data_path,
+    )
 
-        print(
-            f"= 0: {(df['discount_percent'] == 0).sum()}"
-        )
+    df = pd.read_parquet(
+        data_path
+    )
 
-        print(
-            f"> 0: {(df['discount_percent'] > 0).sum()}"
-        )
+    required = (
+        GROUP_COLS
+        + [
+            DATE_COL,
+            TARGET,
+        ]
+    )
 
-    # ---------------------------------------------------------
-    # 5. Kolumny związane z ceną
-    # ---------------------------------------------------------
-    print("\n=== PRICE COLUMNS ===")
-
-    price_cols = [
-        col for col in df.columns
-        if "price" in col.lower()
+    missing = [
+        col
+        for col in required
+        if col not in df.columns
     ]
 
-    print(price_cols)
+    if missing:
+        raise ValueError(
+            f"Brak wymaganych kolumn: {missing}"
+        )
 
-    for col in price_cols:
-        print(f"\n{col}:")
-        print(f"  dtype: {df[col].dtype}")
-        print(f"  NaN: {df[col].isna().sum()}")
+    df[
+        DATE_COL
+    ] = pd.to_datetime(
+        df[
+            DATE_COL
+        ],
+        errors="coerce",
+    )
 
-        numeric_price = pd.to_numeric(
-            df[col],
-            errors="coerce"
+    df[
+        TARGET
+    ] = pd.to_numeric(
+        df[
+            TARGET
+        ],
+        errors="coerce",
+    )
+
+    df = df.dropna(
+        subset=required
+    ).copy()
+
+    df[
+        "StoreNo"
+    ] = (
+        df[
+            "StoreNo"
+        ]
+        .astype(str)
+    )
+
+    df[
+        "IDX"
+    ] = (
+        df[
+            "IDX"
+        ]
+        .astype(str)
+    )
+
+
+    # ========================================================
+    # DIAGNOSTYKA DANYCH
+    # ========================================================
+
+    print(
+        "\n"
+        + "=" * 60
+    )
+
+    print(
+        "DIAGNOSTYKA DANYCH WEJŚCIOWYCH"
+    )
+
+    print(
+        "=" * 60
+    )
+
+    sales_numeric = pd.to_numeric(
+        df[
+            TARGET
+        ],
+        errors="coerce",
+    )
+
+    zero_sales = (
+        sales_numeric
+        == 0
+    ).sum()
+
+    positive_sales = (
+        sales_numeric
+        > 0
+    ).sum()
+
+    print(
+        "\n=== SALES ==="
+    )
+
+    print(
+        f"Wszystkie rekordy: "
+        f"{len(df)}"
+    )
+
+    print(
+        f"Sales = 0: "
+        f"{zero_sales} "
+        f"({zero_sales / len(df) * 100:.2f}%)"
+    )
+
+    print(
+        f"Sales > 0: "
+        f"{positive_sales} "
+        f"({positive_sales / len(df) * 100:.2f}%)"
+    )
+
+    print(
+        f"Sales NaN: "
+        f"{sales_numeric.isna().sum()}"
+    )
+
+
+    if "OOS" in df.columns:
+
+        print(
+            "\n=== OOS ==="
         )
 
         print(
-            f"  wartości numeryczne: "
-            f"{numeric_price.notna().sum()}"
-        )
-
-    # ---------------------------------------------------------
-    # 6. Promocje w dniach bez sprzedaży
-    # ---------------------------------------------------------
-    if "promo" in df.columns:
-        print("\n=== PROMO A SALES = 0 ===")
-
-        zero_df = df.loc[sales_numeric == 0]
-
-        print(
-            zero_df["promo"]
-            .value_counts(dropna=False)
+            df[
+                "OOS"
+            ]
+            .value_counts(
+                dropna=False
+            )
             .sort_index()
         )
 
-    # ---------------------------------------------------------
-    # 7. Discount w dniach bez sprzedaży
-    # ---------------------------------------------------------
+
+    if "promo" in df.columns:
+
+        print(
+            "\n=== PROMO ==="
+        )
+
+        print(
+            df[
+                "promo"
+            ]
+            .value_counts(
+                dropna=False
+            )
+            .sort_index()
+        )
+
+
     if "discount_percent" in df.columns:
-        print("\n=== DISCOUNT A SALES = 0 ===")
-
-        zero_df = df.loc[sales_numeric == 0]
 
         print(
-            f"NaN: "
-            f"{zero_df['discount_percent'].isna().sum()}"
+            "\n=== DISCOUNT_PERCENT ==="
         )
 
         print(
-            f"> 0: "
-            f"{(zero_df['discount_percent'] > 0).sum()}"
+            "NaN:",
+            df[
+                "discount_percent"
+            ]
+            .isna()
+            .sum()
         )
 
-    required = [DATE_COL, TARGET] + GROUP_COLS
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        raise ValueError(f"Brak wymaganych kolumn: {missing}")
+        print(
+            "= 0:",
+            (
+                df[
+                    "discount_percent"
+                ]
+                == 0
+            ).sum()
+        )
 
-    df[DATE_COL] = pd.to_datetime(df[DATE_COL], errors="coerce")
-    df[TARGET] = pd.to_numeric(df[TARGET], errors="coerce")
-    df = df.dropna(subset=[DATE_COL, TARGET] + GROUP_COLS).copy()
+        print(
+            "> 0:",
+            (
+                df[
+                    "discount_percent"
+                ]
+                > 0
+            ).sum()
+        )
 
-    # Zachowujemy oryginalne identyfikatory do wykresów przed kodowaniem kategorii.
-    df["StoreNo"] = df["StoreNo"].astype(str)
-    df["IDX"] = df["IDX"].astype(str)
 
-    logging.info("Liczba wierszy przed feature engineering: %s", len(df))
+    # ========================================================
+    # FEATURE ENGINEERING
+    # ========================================================
 
-    df = add_calendar_features(df)
+    logging.info(
+        "Liczba wierszy przed feature engineering: %s",
+        len(df),
+    )
 
-    df[TARGET] = pd.to_numeric(df[TARGET], errors="coerce")
+    df = add_calendar_features(
+        df
+    )
 
-    df["SalesForHistory"] = df[TARGET]
+    df = add_sales_for_history(
+        df
+    )
 
-    if "OOS" in df.columns:
-        oos_numeric = pd.to_numeric(
-            df["OOS"],
-            errors="coerce"
-        ).fillna(0)
+    df = add_exact_date_lags(
+        df
+    )
 
-        df.loc[
-            oos_numeric == 1,
-            "SalesForHistory"
-        ] = np.nan
 
-    df = add_exact_date_lags(df)
+    # ========================================================
+    # DIAGNOSTYKA LAG_7
+    # ========================================================
 
-    df["history_mean_4lags"] = df[
-        ["lag_1", "lag_7", "lag_14", "lag_28"]
-    ].mean(axis=1, skipna=True)
-
-    print("\n=== ANALIZA BRAKU LAG_7 ===")
+    print(
+        "\n=== ANALIZA BRAKU LAG_7 ==="
+    )
 
     first_dates = (
-        df.groupby(GROUP_COLS)[DATE_COL]
-        .transform("min")
+        df.groupby(
+            GROUP_COLS
+        )[
+            DATE_COL
+        ]
+        .transform(
+            "min"
+        )
     )
 
-    df["days_from_series_start"] = (
-        df[DATE_COL] - first_dates
+    df[
+        "days_from_series_start"
+    ] = (
+        df[
+            DATE_COL
+        ]
+        - first_dates
     ).dt.days
 
-    missing_lag7_mask = df["lag_7"].isna()
+    missing_lag7 = (
+        df[
+            "lag_7"
+        ]
+        .isna()
+    )
 
-    missing_in_first_7_days = (
-        missing_lag7_mask
-        & (df["days_from_series_start"] < 7)
+    missing_first_week = (
+        missing_lag7
+        &
+        (
+            df[
+                "days_from_series_start"
+            ]
+            < 7
+        )
     ).sum()
 
-    missing_after_first_7_days = (
-        missing_lag7_mask
-        & (df["days_from_series_start"] >= 7)
+    missing_later = (
+        missing_lag7
+        &
+        (
+            df[
+                "days_from_series_start"
+            ]
+            >= 7
+        )
     ).sum()
 
     print(
-        f"Brak lag_7 w pierwszych 7 dniach historii: "
-        f"{missing_in_first_7_days}"
+        "Brak lag_7 "
+        "w pierwszych 7 dniach historii:",
+        missing_first_week,
     )
 
     print(
-        f"Brak lag_7 po pierwszych 7 dniach historii: "
-        f"{missing_after_first_7_days}"
+        "Brak lag_7 "
+        "po pierwszych 7 dniach historii:",
+        missing_later,
     )
 
     print(
-        f"Serie StoreNo+IDX: "
-        f"{df[GROUP_COLS].drop_duplicates().shape[0]}"
+        "Serie StoreNo+IDX:",
+        df[
+            GROUP_COLS
+        ]
+        .drop_duplicates()
+        .shape[0],
     )
 
-  
+
+    # ========================================================
+    # USUNIĘCIE BRAKU LAG_7
+    # ========================================================
+
     before = len(df)
-    df = df.dropna(subset=["lag_7"]).copy()
-    logging.info("Usunięto %s wierszy bez lag_7", before - len(df))
 
-    # Usunięcie oczywistych pól powodujących leakage / niedostępnych prognostycznie.
-    drop_actual = [c for c in DROP_IF_PRESENT if c in df.columns]
+    df = df.dropna(
+        subset=[
+            "lag_7"
+        ]
+    ).copy()
+
+    logging.info(
+        "Usunięto %s wierszy bez lag_7",
+        before - len(df),
+    )
+
+
+    # ========================================================
+    # POLA NIEUŻYWANE
+    # ========================================================
+
+    drop_actual = [
+        col
+        for col in DROP_IF_PRESENT
+        if col in df.columns
+    ]
+
     if drop_actual:
-        logging.info("Usuwam z wejścia pola: %s", drop_actual)
-        df = df.drop(columns=drop_actual)
 
-    train, test, cutoff_date = split_by_unique_dates(df, ratio=0.8)
-    logging.info("Cutoff train/test: %s", cutoff_date.date())
+        logging.info(
+            "Usuwam z wejścia pola: %s",
+            drop_actual,
+        )
 
-    # Dni OOS wyłączamy również z treningu: obserwowana sprzedaż podczas braku
-    # towaru jest sprzedażą ograniczoną dostępnością, a nie pełnym popytem.
+        df = df.drop(
+            columns=drop_actual
+        )
+
+
+    # ========================================================
+    # TRAIN / TEST
+    # ========================================================
+
+    train, test, cutoff_date = (
+        split_by_unique_dates(
+            df,
+            ratio=0.8,
+        )
+    )
+
+    logging.info(
+        "Cutoff train/test: %s",
+        cutoff_date.date(),
+    )
+
+
+    # ========================================================
+    # OOS W TRAIN
+    # ========================================================
+
     if "OOS" in train.columns:
-        train_oos = pd.to_numeric(train["OOS"], errors="coerce").fillna(0)
-        before_train = len(train)
-        train = train.loc[train_oos != 1].copy()
-        logging.info("Wyłączono z treningu %s wierszy OOS", before_train - len(train))
 
-    logging.info("Train: %s wierszy | Test: %s wierszy", len(train), len(test))
+        train_oos = pd.to_numeric(
+            train[
+                "OOS"
+            ],
+            errors="coerce",
+        ).fillna(0)
 
-    # Ocena na dniach, gdy produkt był dostępny. Przy OOS rzeczywista sprzedaż
-    # nie reprezentuje pełnego popytu. Jeśli OOS nie istnieje, oceniamy wszystkie dni.
+        before_train = len(
+            train
+        )
+
+        train = train.loc[
+            train_oos != 1
+        ].copy()
+
+        logging.info(
+            "Wyłączono z treningu %s wierszy OOS",
+            before_train
+            - len(train),
+        )
+
+
+    logging.info(
+        "Train: %s wierszy | Test: %s wierszy",
+        len(train),
+        len(test),
+    )
+
+
+    # ========================================================
+    # SEGMENTACJA ROTACJI
+    # ========================================================
+
+    (
+        series_stats,
+        rotation_q_low,
+        rotation_q_high,
+    ) = build_rotation_groups(
+        train
+    )
+
+    train = attach_rotation_groups(
+        train,
+        series_stats,
+    )
+
+    test = attach_rotation_groups(
+        test,
+        series_stats,
+    )
+
+
+    # ========================================================
+    # MASKA EWALUACJI
+    # ========================================================
+
     if "OOS" in test.columns:
-        oos_numeric = pd.to_numeric(test["OOS"], errors="coerce").fillna(0)
-        test_eval_mask = oos_numeric != 1
+
+        test_oos = pd.to_numeric(
+            test[
+                "OOS"
+            ],
+            errors="coerce",
+        ).fillna(0)
+
+        eval_mask = (
+            test_oos
+            != 1
+        )
+
     else:
-        test_eval_mask = pd.Series(True, index=test.index)
 
-    # Oryginalne identyfikatory potrzebne do czytelnego wykresu.
-    test["StoreNo_original"] = test["StoreNo"].astype(str)
-    test["IDX_original"] = test["IDX"].astype(str)
+        eval_mask = pd.Series(
+            True,
+            index=test.index,
+        )
 
-    train, test, features = prepare_features(train, test)
 
-    X_train = train[features]
-    y_train = train[TARGET].astype("float32")
-    X_test = test[features]
+    # ========================================================
+    # ONE HOT
+    # ========================================================
+
+    (
+        train,
+        test,
+        X_train,
+        X_test,
+        feature_names,
+        preprocessor,
+    ) = prepare_features_one_hot(
+        train,
+        test,
+    )
+
+
+    y_train = (
+        train[
+            TARGET
+        ]
+        .astype(
+            "float32"
+        )
+    )
+
+
+    logging.info(
+        "Po OneHotEncoder liczba cech: %s",
+        len(
+            feature_names
+        ),
+    )
+
+
+    # ========================================================
+    # MODEL
+    # ========================================================
 
     model = xgb.XGBRegressor(
-        objective="reg:squarederror",
+
+        objective=
+            "reg:squarederror",
+
         n_estimators=500,
+
         max_depth=8,
+
         learning_rate=0.05,
+
         subsample=0.8,
+
         colsample_bytree=0.8,
+
         random_state=42,
+
         n_jobs=-1,
+
         tree_method="hist",
     )
 
-    logging.info("Trenowanie XGBoost na %s cechach...", len(features))
-    model.fit(X_train, y_train)
-    test["prediction_xgboost"] = np.clip(model.predict(X_test), a_min=0, a_max=None)
 
-    # Po prepare_features indeks został zachowany, więc maskę można wyrównać po indeksie.
-    eval_mask = test_eval_mask.reindex(test.index).fillna(False)
-    eval_df = test.loc[eval_mask].copy()
+    logging.info(
+        "Trenowanie XGBoost "
+        "na %s cechach po OneHotEncoder...",
+        len(
+            feature_names
+        ),
+    )
+
+
+    model.fit(
+        X_train,
+        y_train,
+    )
+
+
+    # ========================================================
+    # PREDYKCJA
+    # ========================================================
+
+    prediction = model.predict(
+        X_test
+    )
+
+    prediction = np.clip(
+        prediction,
+        a_min=0,
+        a_max=None,
+    )
+
+    test[
+        "prediction_xgboost"
+    ] = prediction
+
+
+    # ========================================================
+    # EWALUACJA
+    # ========================================================
+
+    eval_df = test.loc[
+        eval_mask
+    ].copy()
+
 
     if eval_df.empty:
-        raise ValueError("Po wyłączeniu OOS zbiór testowy do ewaluacji jest pusty.")
+        raise ValueError(
+            "Brak rekordów do ewaluacji."
+        )
+
 
     metrics = {
-        "xgboost": calculate_metrics(eval_df[TARGET], eval_df["prediction_xgboost"]),
+
+        "xgboost":
+            calculate_metrics(
+                eval_df[
+                    TARGET
+                ],
+
+                eval_df[
+                    "prediction_xgboost"
+                ],
+            )
     }
 
-    # Baseline'y liczymy tylko na rekordach, gdzie dany lag istnieje.
-    for baseline_name, baseline_pred in make_baselines(eval_df).items():
-        valid = baseline_pred.notna()
-        if valid.any():
-            metrics[baseline_name] = calculate_metrics(
-                eval_df.loc[valid, TARGET],
-                baseline_pred.loc[valid],
-            )
 
-    metrics["meta"] = {
-        "cutoff_date": str(cutoff_date.date()),
-        "train_rows": int(len(train)),
-        "test_rows": int(len(test)),
-        "evaluation_rows": int(len(eval_df)),
-        "excluded_oos_rows": int(len(test) - len(eval_df)),
-        "n_features": len(features),
-        "features": features,
+    # ========================================================
+    # BASELINE
+    # ========================================================
+
+    baselines = make_baselines(
+        eval_df
+    )
+
+
+    for (
+        baseline_name,
+        prediction_series
+    ) in baselines.items():
+
+        valid = (
+            prediction_series
+            .notna()
+        )
+
+        if not valid.any():
+            continue
+
+        metrics[
+            baseline_name
+        ] = calculate_metrics(
+
+            eval_df.loc[
+                valid,
+                TARGET
+            ],
+
+            prediction_series.loc[
+                valid
+            ],
+        )
+
+
+    # ========================================================
+    # WYNIKI WG ROTACJI
+    # ========================================================
+
+    rotation_metrics = (
+        calculate_rotation_metrics(
+            eval_df
+        )
+    )
+
+    print(
+        "\n=== WYNIKI WG ROTACJI ==="
+    )
+
+    print(
+        rotation_metrics.to_string(
+            index=False
+        )
+    )
+
+
+    rotation_metrics.to_csv(
+        REPORTS
+        / "rotation_metrics.csv",
+        index=False,
+    )
+
+
+    series_stats.to_csv(
+        REPORTS
+        / "rotation_series_stats.csv",
+        index=False,
+    )
+
+
+    save_rotation_comparison_plot(
+        rotation_metrics
+    )
+
+
+    # ========================================================
+    # META
+    # ========================================================
+
+    metrics[
+        "meta"
+    ] = {
+
+        "cutoff_date":
+            str(
+                cutoff_date.date()
+            ),
+
+        "train_rows":
+            int(
+                len(
+                    train
+                )
+            ),
+
+        "test_rows":
+            int(
+                len(
+                    test
+                )
+            ),
+
+        "evaluation_rows":
+            int(
+                len(
+                    eval_df
+                )
+            ),
+
+        "excluded_oos_rows":
+            int(
+                len(
+                    test
+                )
+                - len(
+                    eval_df
+                )
+            ),
+
+        "n_features_after_one_hot":
+            len(
+                feature_names
+            ),
+
+        "numeric_features":
+            [
+                col
+                for col
+                in NUMERIC_CANDIDATES
+                if col in train.columns
+            ],
+
+        "categorical_features":
+            [
+                col
+                for col
+                in CATEGORICAL_CANDIDATES
+                if col in train.columns
+            ],
+
+        "rotation_thresholds": {
+
+            "low_medium":
+                float(
+                    rotation_q_low
+                ),
+
+            "medium_high":
+                float(
+                    rotation_q_high
+                ),
+        },
+
         "notes": [
-            "SalesValue i stock_price_net nie są używane jako cechy modelu.",
-            "OOS nie jest używane jako cecha; dni OOS=1 są wyłączone z treningu i ewaluacji.",
-            "Lagi są liczone po dokładnych datach kalendarzowych.",
-            "Podział train/test jest czasowy i wykonywany po unikalnych datach.",
+
+            "SalesValue i stock_price_net "
+            "nie są używane jako cechy modelu.",
+
+            "OOS nie jest używane jako cecha.",
+
+            "Rekordy OOS są wyłączone "
+            "z treningu i ewaluacji.",
+
+            "Sprzedaż podczas OOS "
+            "nie jest używana do lagów.",
+
+            "Lagi są liczone "
+            "po dokładnych datach kalendarzowych.",
+
+            "StoreNo, Brand, DIV2 i IDX "
+            "są kodowane przez OneHotEncoder.",
+
+            "OneHotEncoder jest dopasowany "
+            "wyłącznie na zbiorze treningowym.",
+
+            "Promo jest wykorzystywane "
+            "jako cecha modelu.",
+
+            "discount_percent został wyłączony "
+            "po eksperymencie ablation, "
+            "ponieważ nie poprawiał jakości prognozy.",
+
+            "Grupy low, medium i high rotation "
+            "są wyznaczane wyłącznie "
+            "na podstawie zbioru treningowego.",
+
+            "Podstawą segmentacji jest "
+            "średnia dzienna sprzedaż "
+            "dla StoreNo + IDX.",
         ],
     }
 
-    (REPORTS / "metrics_v2.json").write_text(
-        json.dumps(metrics, indent=2, ensure_ascii=False),
+
+    # ========================================================
+    # ZAPIS WYNIKÓW
+    # ========================================================
+
+    (
+        REPORTS
+        / "metrics_v2.json"
+    ).write_text(
+
+        json.dumps(
+            metrics,
+            indent=2,
+            ensure_ascii=False,
+        ),
+
         encoding="utf-8",
     )
 
-    save_feature_importance(model, features)
-    save_model_comparison(metrics)
 
-    # Przywróć czytelne ID na potrzeby wykresu.
-    eval_df["StoreNo_original"] = test.loc[eval_df.index, "StoreNo_original"]
-    eval_df["IDX_original"] = test.loc[eval_df.index, "IDX_original"]
-    save_example_prediction_plot(eval_df)
+    save_feature_importance(
+        model,
+        feature_names,
+    )
 
-    # Predykcje przydadzą się później do analizy błędów w pracy.
+
+    save_model_comparison(
+        metrics
+    )
+
+
+    save_example_prediction_plot(
+        eval_df
+    )
+
+
+    # ========================================================
+    # PREDYKCJE CSV
+    # ========================================================
+
     prediction_cols = [
-        DATE_COL,
-        "StoreNo_original",
-        "IDX_original",
-        TARGET,
-        "prediction_xgboost",
-    ] + [c for c in ["lag_1", "lag_7", "lag_14", "lag_28", "promo", "discount_percent", "OOS"] if c in eval_df.columns]
-    eval_df[prediction_cols].to_csv(REPORTS / "predictions_test.csv", index=False)
 
-    logging.info("Gotowe. Wyniki zapisano w %s", REPORTS)
-    print(json.dumps(metrics, indent=2, ensure_ascii=False))
+        DATE_COL,
+        "StoreNo",
+        "IDX",
+
+        "rotation_group",
+
+        TARGET,
+
+        "prediction_xgboost",
+
+    ] + [
+
+        col
+        for col in [
+
+            "lag_1",
+            "lag_7",
+            "lag_14",
+            "lag_28",
+
+            "history_mean_4lags",
+
+            "promo",
+
+            "OOS",
+
+        ]
+
+        if col in eval_df.columns
+    ]
+
+
+    eval_df[
+        prediction_cols
+    ].to_csv(
+
+        REPORTS
+        / "predictions_test.csv",
+
+        index=False,
+    )
+
+
+    logging.info(
+        "Gotowe. "
+        "Wyniki zapisano w %s",
+        REPORTS,
+    )
+
+
+    print(
+        "\n=== WYNIKI GLOBALNE ==="
+    )
+
+    print(
+        json.dumps(
+            metrics,
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":
