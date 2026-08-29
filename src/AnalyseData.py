@@ -1,54 +1,86 @@
-import pandas as pd
-from dask.distributed import Client, LocalCluster
+"""Basic validation and descriptive analysis of the merged forecasting dataset."""
+
+from pathlib import Path
+
 import matplotlib.pyplot as plt
-import seaborn as sns
+import pandas as pd
 
-from config import FINAL
-
-MergedData_final_path = FINAL/"MergedData.parquet"
-MergedData_final_path_after = FINAL/"MergedDataAfter.parquet"
+from config import FINAL, REPORTS, PLOTS
 
 
-df = pd.read_parquet(MergedData_final_path)
-df = df.drop('ID', axis=1)
+INPUT_PATH = FINAL / "MergedData.parquet"
+OUTPUT_PATH = FINAL / "MergedDataAfter.parquet"
+STATS_PATH = REPORTS / "descriptive_statistics.csv"
+SALES_PLOT_PATH = PLOTS / "sales_distribution.png"
 
 
-df['Sales'] = df['Sales'].fillna(0)
-df.loc[df['Sales'] < 0, 'Sales'] = 0
-df['SalesValue'] = df['SalesValue'].fillna(0)
-df.loc[df['SalesValue'] < 0, 'SalesValue'] = 0
-df['OOS'] = df['OOS'].fillna(0)
-df['discount_percent'] = df['discount_percent'].fillna(0)
-df.loc[df['discount_percent'] < 0, 'discount_percent'] = 0
+def prepare_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    """Apply final deterministic cleaning before modelling."""
+    df = df.copy()
+
+    if "ID" in df.columns:
+        df = df.drop(columns=["ID"])
+
+    for col in ["Sales", "SalesValue", "discount_percent"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            df.loc[df[col] < 0, col] = 0
+
+    if "OOS" in df.columns:
+        df["OOS"] = pd.to_numeric(df["OOS"], errors="coerce").fillna(0).astype(int)
+
+    if "promo" in df.columns:
+        df["promo"] = pd.to_numeric(df["promo"], errors="coerce").fillna(0).astype(int)
+
+    if "DateNo" in df.columns:
+        df["DateNo"] = pd.to_datetime(df["DateNo"], errors="coerce")
+
+    return df
 
 
-df.to_parquet(MergedData_final_path_after, engine="pyarrow")
+def save_sales_distribution(df: pd.DataFrame) -> None:
+    if "Sales" not in df.columns:
+        return
 
-pd.set_option('display.max_columns', None)
-print(df.head())
-
-
-
-print("Podstawowe informacje o danych: ")
-print(df.info())
-
-print("\nPierwsze wiersze danych:")
-print(df.head())
-
-# 3. Sprawdzenie brakujących wartości
-print("\nBrakujące wartości w danych:")
-print(df.isnull().sum())
-
-# 4. Opis statystyczny zmiennych numerycznych
-print("\nStatystyki opisowe:")
-df.describe().to_csv("statystyki.csv", index=True)
-
-# 5. Wizualizacja rozkładu zmiennej docelowej (Sales)
-plt.figure(figsize=(8, 5))
-sns.histplot(df["Sales"], bins=20, kde=True)
-plt.title("Rozkład wartości Sales")
-plt.xlabel("Sales")
-plt.ylabel("Liczność")
-plt.show()
+    plt.figure(figsize=(8, 5))
+    plt.hist(df["Sales"].dropna(), bins=30)
+    plt.title("Rozkład dziennej sprzedaży")
+    plt.xlabel("Sales")
+    plt.ylabel("Liczba obserwacji")
+    plt.tight_layout()
+    plt.savefig(SALES_PLOT_PATH, dpi=160)
+    plt.close()
 
 
+def main() -> None:
+    if not INPUT_PATH.exists():
+        raise FileNotFoundError(f"Nie znaleziono pliku wejściowego: {INPUT_PATH}")
+
+    REPORTS.mkdir(parents=True, exist_ok=True)
+    PLOTS.mkdir(parents=True, exist_ok=True)
+
+    df = pd.read_parquet(INPUT_PATH)
+    df = prepare_dataset(df)
+
+    df.to_parquet(OUTPUT_PATH, engine="pyarrow", compression="snappy", index=False)
+    df.describe(include="all").transpose().to_csv(STATS_PATH)
+    save_sales_distribution(df)
+
+    print(f"Liczba rekordów: {len(df)}")
+    print(f"Liczba kolumn: {len(df.columns)}")
+    print("\nBrakujące wartości:")
+    print(df.isna().sum().sort_values(ascending=False).head(20))
+
+    if "Sales" in df.columns:
+        zero_sales = int((df["Sales"] == 0).sum())
+        positive_sales = int((df["Sales"] > 0).sum())
+        print(f"\nSales = 0: {zero_sales} ({zero_sales / len(df) * 100:.2f}%)")
+        print(f"Sales > 0: {positive_sales} ({positive_sales / len(df) * 100:.2f}%)")
+
+    print(f"\nZapisano: {OUTPUT_PATH}")
+    print(f"Statystyki: {STATS_PATH}")
+    print(f"Wykres: {SALES_PLOT_PATH}")
+
+
+if __name__ == "__main__":
+    main()

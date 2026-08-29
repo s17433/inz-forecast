@@ -1,0 +1,4 @@
+model,MAE,RMSE,WAPE_percent
+xgboost,1.5429,3.1196,77.73
+naive_t_minus_1,1.9919,4.3761,100.09
+seasonal_naive_t_minus_7,1.9896,4.4486,100.23

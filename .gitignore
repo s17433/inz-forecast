@@ -1,9 +1,24 @@
-data/
-*.parquet
-*.csv
-*.zip
-.ipynb_checkpoints/
-.DS_Store
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
 .venv/
 venv/
 forecastingenv/
+
+# IDE
+.vscode/
+.idea/
+
+# Data - source datasets are not stored in Git
+data/raw/
+data/processed/
+data/final/
+
+# Generated outputs
+reports/logs/*.log
+statystyki.csv
+
+# OS
+.DS_Store
+Thumbs.db
