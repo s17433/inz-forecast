@@ -1,5 +1,3 @@
-from os import write
-
 import dask.dataframe as dd
 import logging
 
@@ -59,30 +57,12 @@ def filter_chosen_idxs(df):
         logging.error(f"Błąd przy filtrowaniu IDX: {e}")
         raise
 
-def filter_promotion(df):
-    try:
-        promotion = dd.read_parquet(PROCESSED/"SalesChStores.parquet",
-                                      header=None, names=['ID'])
-
-        promotion = promotion[promotion['ID'].notnull()]
-
-        promotion = promotion.compute()
-
-        df = df[df['ID'].isin(promotion['ID'])]
-
-        return df
-    except Exception as e:
-        logging.error(f"Błąd przy filtrowaniu promocji: {e}")
-        raise
-
 def cleaning_file(source_file_path, required_columns, final_file_path):
 
     df = write_file(source_file_path)
     df = drop_missing_values(df, required_columns)
     df = filter_chosen_idxs(df)
 
-    if source_file_path == PROCESSED/"Promotions.parquet":
-        df = filter_promotion(df)
 
     try:
         df.to_parquet(final_file_path, engine='pyarrow', compression='snappy')
@@ -114,7 +94,7 @@ required_columns_PlanogramChStores = ['source_stock_date','location_id','product
 PlanogramChStores_source_path = PROCESSED/"PlanogramChStores.parquet"
 PlanogramChStores_final_path = FINAL/"PlanogramChStores.parquet"
 
-required_columns_Promotions = ['ID', 'ID_Promo', 'TypeExtention', 'IDX', 'SellingPrice', 'SellingPricePromoEs', 'discount_percent', 'MechanismType', 'MechanismSubtype', 'DateStart', 'DateEnd']
+required_columns_Promotions = ['IDX', 'DateStart', 'DateEnd']
 Promotions_source_path = PROCESSED/"Promotions.parquet"
 Promotions_final_path = FINAL/"Promotions.parquet"
 
@@ -123,5 +103,4 @@ if __name__ == "__main__":
     cleaning_file(IDXs_source_path, required_columns_IDXs, IDXs_final_path)
     cleaning_file(OutOfStock_source_path, required_columns_OutOfStock, OutOfStock_final_path)
     cleaning_file(PlanogramChStores_source_path, required_columns_PlanogramChStores, PlanogramChStores_final_path)
-    cleaning_file(Promotions_source_path, required_columns_Promotions, Promotions_final_path)
     cleaning_file(Promotions_source_path, required_columns_Promotions, Promotions_final_path)
